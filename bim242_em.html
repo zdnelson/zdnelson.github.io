@@ -1,0 +1,355 @@
+
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html><head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+   <!--
+This HTML was auto-generated from MATLAB code.
+To make changes, update the MATLAB code and republish this document.
+      --><title>Expectation Maximization Algorithim for PET image Reconstruction</title><meta name="generator" content="MATLAB 9.2"><link rel="schema.DC" href="http://purl.org/dc/elements/1.1/"><meta name="DC.date" content="2018-09-17"><meta name="DC.source" content="bim242_em.m"><style type="text/css">
+html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,font,img,ins,kbd,q,s,samp,small,strike,strong,sub,sup,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,table,caption,tbody,tfoot,thead,tr,th,td{margin:0;padding:0;border:0;outline:0;font-size:100%;vertical-align:baseline;background:transparent}body{line-height:1}ol,ul{list-style:none}blockquote,q{quotes:none}blockquote:before,blockquote:after,q:before,q:after{content:'';content:none}:focus{outine:0}ins{text-decoration:none}del{text-decoration:line-through}table{border-collapse:collapse;border-spacing:0}
+
+html { min-height:100%; margin-bottom:1px; }
+html body { height:100%; margin:0px; font-family:Arial, Helvetica, sans-serif; font-size:10px; color:#000; line-height:140%; background:#fff none; overflow-y:scroll; }
+html body td { vertical-align:top; text-align:left; }
+
+h1 { padding:0px; margin:0px 0px 25px; font-family:Arial, Helvetica, sans-serif; font-size:1.5em; color:#d55000; line-height:100%; font-weight:normal; }
+h2 { padding:0px; margin:0px 0px 8px; font-family:Arial, Helvetica, sans-serif; font-size:1.2em; color:#000; font-weight:bold; line-height:140%; border-bottom:1px solid #d6d4d4; display:block; }
+h3 { padding:0px; margin:0px 0px 5px; font-family:Arial, Helvetica, sans-serif; font-size:1.1em; color:#000; font-weight:bold; line-height:140%; }
+
+a { color:#005fce; text-decoration:none; }
+a:hover { color:#005fce; text-decoration:underline; }
+a:visited { color:#004aa0; text-decoration:none; }
+
+p { padding:0px; margin:0px 0px 20px; }
+img { padding:0px; margin:0px 0px 20px; border:none; }
+p img, pre img, tt img, li img, h1 img, h2 img { margin-bottom:0px; } 
+
+ul { padding:0px; margin:0px 0px 20px 23px; list-style:square; }
+ul li { padding:0px; margin:0px 0px 7px 0px; }
+ul li ul { padding:5px 0px 0px; margin:0px 0px 7px 23px; }
+ul li ol li { list-style:decimal; }
+ol { padding:0px; margin:0px 0px 20px 0px; list-style:decimal; }
+ol li { padding:0px; margin:0px 0px 7px 23px; list-style-type:decimal; }
+ol li ol { padding:5px 0px 0px; margin:0px 0px 7px 0px; }
+ol li ol li { list-style-type:lower-alpha; }
+ol li ul { padding-top:7px; }
+ol li ul li { list-style:square; }
+
+.content { font-size:1.2em; line-height:140%; padding: 20px; }
+
+pre, code { font-size:12px; }
+tt { font-size: 1.2em; }
+pre { margin:0px 0px 20px; }
+pre.codeinput { padding:10px; border:1px solid #d3d3d3; background:#f7f7f7; }
+pre.codeoutput { padding:10px 11px; margin:0px 0px 20px; color:#4c4c4c; }
+pre.error { color:red; }
+
+@media print { pre.codeinput, pre.codeoutput { word-wrap:break-word; width:100%; } }
+
+span.keyword { color:#0000FF }
+span.comment { color:#228B22 }
+span.string { color:#A020F0 }
+span.untermstring { color:#B20000 }
+span.syscmd { color:#B28C00 }
+
+.footer { width:auto; padding:10px 0px; margin:25px 0px 0px; border-top:1px dotted #878787; font-size:0.8em; line-height:140%; font-style:italic; color:#878787; text-align:left; float:none; }
+.footer p { margin:0px; }
+.footer a { color:#878787; }
+.footer a:hover { color:#878787; text-decoration:underline; }
+.footer a:visited { color:#878787; }
+
+table th { padding:7px 5px; text-align:left; vertical-align:middle; border: 1px solid #d6d4d4; font-weight:bold; }
+table td { padding:7px 5px; text-align:left; vertical-align:top; border:1px solid #d6d4d4; }
+
+
+
+
+
+  </style></head><body><div class="content"><h1>Expectation Maximization Algorithim for PET image Reconstruction</h1><!--introduction--><p>Author: Zachary Nelson. Date: November 11, 2016. Description: This program performs the Expectation Maximization Algorithim for imgage reconstruction given the output signal from a PET machine (brain_image.mat) and the PET system geometry (P.mat).</p><!--/introduction--><h2>Contents</h2><div><ul><li><a href="#2">Load the virtual PET system matrix and brain image</a></li><li><a href="#3">Simulate a PET sinogram by forward projection</a></li><li><a href="#4">maximum likelihood (ML) expectation maximization (EM) reconstruction</a></li><li><a href="#5">Evaluation of likelihood and reconstruction error</a></li></ul></div><pre class="codeinput">clear; clc; close <span class="string">all</span>;
+</pre><h2 id="2">Load the virtual PET system matrix and brain image</h2><pre class="codeinput">disp(<span class="string">'1. Loading the virtual PET system and brain image'</span>)
+
+<span class="comment">% load the PET system matrix</span>
+imgsiz = [256 256]; <span class="comment">% define image grid</span>
+prjsiz = [256 192]; <span class="comment">% define sinogram size: 256 radial bins, 192 angular bins</span>
+load(<span class="string">'P'</span>); <span class="comment">% 2D PET sparse system matrix, xy projection</span>
+
+load(<span class="string">'brain_image'</span>); <span class="comment">% load machine True image.</span>
+
+<span class="comment">% display the True brain image</span>
+figure(1)
+imagesc(x0,[0 90]);
+axis <span class="string">image</span>; title(<span class="string">'1. Noise-Free Image'</span>); colorbar;
+</pre><pre class="codeoutput">1. Loading the virtual PET system and brain image
+</pre><img vspace="5" hspace="5" src="bim242_em_01.png" alt=""> <h2 id="3">Simulate a PET sinogram by forward projection</h2><pre class="codeinput">disp(<span class="string">'2. Simulated PET sinogram data'</span>)
+
+<span class="comment">% noise-free sinogram</span>
+y0 = P * x0(:);          <span class="comment">% forward projection</span>
+
+y0 = reshape(y0,prjsiz); <span class="comment">% reshape it to a matrix</span>
+
+<span class="comment">% display the True brain image</span>
+figure(2)
+subplot(221), imagesc(x0,[0 90]);
+axis <span class="string">image</span>; title(<span class="string">'1. Noise-Free Image'</span>); colorbar;
+
+<span class="comment">% display the noise-free sinogram</span>
+subplot(222), imagesc(imrotate(y0,-90),[0 550]);
+axis <span class="string">image</span>; title(<span class="string">'2. Noise-Free Sinogram'</span>); colorbar;
+
+<span class="comment">% Create sinogram with noise.</span>
+count = 2000e3;             <span class="comment">% 2000K coincidences (photon detection error)</span>
+cs = count / sum(y0(:));    <span class="comment">% scale coincidences</span>
+yi = poissrnd(y0*cs)/cs;    <span class="comment">% include Poisson noise distribution</span>
+
+<span class="comment">% display the nois sinogram</span>
+subplot(223), imagesc(imrotate(yi,-90),[0 550]);
+axis <span class="string">image</span>; title(<span class="string">'3. Noisy Sinogram'</span>); colorbar;
+</pre><pre class="codeoutput">2. Simulated PET sinogram data
+</pre><img vspace="5" hspace="5" src="bim242_em_02.png" alt=""> <h2 id="4">maximum likelihood (ML) expectation maximization (EM) reconstruction</h2><pre class="codeinput">disp(<span class="string">'3. PET image reconstruction using the ML-EM algorithm'</span>)
+
+<span class="comment">% establish maximum iteration number</span>
+maxit = 40;
+
+<span class="comment">% pre-calculate the sensitivity image (backprojection of a uniform</span>
+<span class="comment">% sinogram)</span>
+
+<span class="comment">% algorithm</span>
+y1 = ones(prjsiz);
+s  = P' * y1(:);
+
+<span class="comment">% initial guess, uniform image</span>
+xinit = ones(imgsiz);
+
+<span class="comment">% iterate</span>
+x = xinit(:);
+
+k = 10;
+kk=1;
+<span class="keyword">for</span> it = 1:maxit
+
+    <span class="comment">% display current iteration number</span>
+    <span class="keyword">if</span> rem(it,10)==0
+        disp(sprintf(<span class="string">'ML EM iteration %d'</span>,it));
+    <span class="keyword">end</span>
+
+    <span class="comment">% forward projection</span>
+    yb = P * x;
+
+    <span class="comment">% ratio sinogram</span>
+    yr = yi(:)./yb;
+    yr(yb==0) = 0;
+    yr(yi(:)==0&amp;yb==0) = 1; <span class="comment">% deal with zeros</span>
+
+    <span class="comment">% backprojection</span>
+    xb = P' * yr;
+
+    <span class="comment">% new image estimate</span>
+    x = x./s .* xb;
+
+    <span class="comment">% save image estimate</span>
+    X(:,it) = x(:);
+
+    <span class="comment">% calculate the Poisson log likelihood</span>
+    L(it) = sum(yi(:).*log(yb) - yb);
+
+    <span class="comment">%Display Algorithim changes</span>
+    <span class="keyword">if</span> mod(it-1,4)==0
+        k=k+1;
+        kk=1;
+    <span class="keyword">end</span>
+    figure(k);
+    subplot(2,2,kk);
+    imagesc(reshape(X(:,it),imgsiz),[0 90]); axis <span class="string">image</span>;
+    axis <span class="string">image</span>; title(sprintf(<span class="string">'iteration number: %d'</span>,it)); colorbar;
+    kk=kk+1;
+<span class="keyword">end</span>
+
+
+<span class="comment">% display the EM image estimate</span>
+figure(2)
+subplot(224), imagesc(reshape(X(:,40),imgsiz),[0 90]); axis <span class="string">image</span>;
+axis <span class="string">image</span>; title(<span class="string">'4. Reconstructed Image'</span>); colorbar;
+<span class="comment">%individual figure</span>
+figure(4)
+imagesc(reshape(X(:,40),imgsiz),[0 90]); axis <span class="string">image</span>;
+axis <span class="string">image</span>; title(<span class="string">'4. Reconstructed Image'</span>); colorbar;
+
+figure(1)
+imagesc(x0,[0 90]);
+axis <span class="string">image</span>; title(<span class="string">'1. Noise-Free Image'</span>); colorbar;
+</pre><pre class="codeoutput">3. PET image reconstruction using the ML-EM algorithm
+ML EM iteration 10
+ML EM iteration 20
+ML EM iteration 30
+ML EM iteration 40
+</pre><img vspace="5" hspace="5" src="bim242_em_03.png" alt=""> <img vspace="5" hspace="5" src="bim242_em_04.png" alt=""> <img vspace="5" hspace="5" src="bim242_em_05.png" alt=""> <img vspace="5" hspace="5" src="bim242_em_06.png" alt=""> <img vspace="5" hspace="5" src="bim242_em_07.png" alt=""> <img vspace="5" hspace="5" src="bim242_em_08.png" alt=""> <img vspace="5" hspace="5" src="bim242_em_09.png" alt=""> <img vspace="5" hspace="5" src="bim242_em_10.png" alt=""> <img vspace="5" hspace="5" src="bim242_em_11.png" alt=""> <img vspace="5" hspace="5" src="bim242_em_12.png" alt=""> <img vspace="5" hspace="5" src="bim242_em_13.png" alt=""> <img vspace="5" hspace="5" src="bim242_em_14.png" alt=""> <img vspace="5" hspace="5" src="bim242_em_15.png" alt=""> <h2 id="5">Evaluation of likelihood and reconstruction error</h2><pre class="codeinput">disp(<span class="string">'4. Evaluation of Poisson log likelihood and reconstruction error'</span>)
+
+<span class="comment">% Assess reconstruction error of EM iterates using RMSE</span>
+<span class="keyword">for</span> it = 1:maxit
+    rmse = sqrt(mean((X(:,it)-x0(:)).^2)); <span class="comment">% absolute RMSE</span>
+    RMSE(it) = rmse / sqrt(mean((x0(:)).^2)) * 100; <span class="comment">% percent RMSE</span>
+<span class="keyword">end</span>
+
+<span class="comment">% plot of the Poisson log likelihood as a function of iterations</span>
+ii = 1:maxit;
+figure(5)
+subplot(121), plot(ii,L,<span class="string">'b-x'</span>);
+set(gca,<span class="string">'FontSize'</span>,16);
+xlabel(<span class="string">'Iteration Number'</span>); ylabel(<span class="string">'Poisson Log Likelihood'</span>);
+
+<span class="comment">% plot of RMSE as a function of iterations</span>
+subplot(122), plot(ii,RMSE,<span class="string">'r-x'</span>);
+set(gca,<span class="string">'FontSize'</span>,16);
+xlabel(<span class="string">'Iteration Number'</span>); ylabel(<span class="string">'RMSE (%)'</span>);
+</pre><pre class="codeoutput">4. Evaluation of Poisson log likelihood and reconstruction error
+</pre><img vspace="5" hspace="5" src="bim242_em_16.png" alt=""> <p class="footer"><br><a href="http://www.mathworks.com/products/matlab/">Published with MATLAB&reg; R2017a</a><br></p></div><!--
+##### SOURCE BEGIN #####
+%% Expectation Maximization Algorithim for PET image Reconstruction
+% Author: Zachary Nelson.
+% Date: November 11, 2016.
+% Description: This program performs the Expectation Maximization
+% Algorithim for imgage reconstruction given the output signal from a PET
+% machine (brain_image.mat) and the PET system geometry (P.mat). 
+%%
+clear; clc; close all;
+
+%% Load the virtual PET system matrix and brain image
+disp('1. Loading the virtual PET system and brain image')
+
+% load the PET system matrix 
+imgsiz = [256 256]; % define image grid
+prjsiz = [256 192]; % define sinogram size: 256 radial bins, 192 angular bins
+load('P'); % 2D PET sparse system matrix, xy projection
+
+load('brain_image'); % load machine True image. 
+
+% display the True brain image
+figure(1)
+imagesc(x0,[0 90]); 
+axis image; title('1. Noise-Free Image'); colorbar;
+
+%% Simulate a PET sinogram by forward projection
+disp('2. Simulated PET sinogram data')
+
+% noise-free sinogram 
+y0 = P * x0(:);          % forward projection
+
+y0 = reshape(y0,prjsiz); % reshape it to a matrix 
+
+% display the True brain image
+figure(2)
+subplot(221), imagesc(x0,[0 90]); 
+axis image; title('1. Noise-Free Image'); colorbar;
+
+% display the noise-free sinogram
+subplot(222), imagesc(imrotate(y0,-90),[0 550]); 
+axis image; title('2. Noise-Free Sinogram'); colorbar;
+
+% Create sinogram with noise.
+count = 2000e3;             % 2000K coincidences (photon detection error)
+cs = count / sum(y0(:));    % scale coincidences
+yi = poissrnd(y0*cs)/cs;    % include Poisson noise distribution
+
+% display the nois sinogram
+subplot(223), imagesc(imrotate(yi,-90),[0 550]); 
+axis image; title('3. Noisy Sinogram'); colorbar;
+
+%% maximum likelihood (ML) expectation maximization (EM) reconstruction
+disp('3. PET image reconstruction using the ML-EM algorithm')
+
+% establish maximum iteration number
+maxit = 40; 
+
+% pre-calculate the sensitivity image (backprojection of a uniform
+% sinogram)
+
+% algorithm
+y1 = ones(prjsiz);
+s  = P' * y1(:);
+
+% initial guess, uniform image
+xinit = ones(imgsiz);  
+
+% iterate
+x = xinit(:);
+
+k = 10;
+kk=1;
+for it = 1:maxit
+    
+    % display current iteration number
+    if rem(it,10)==0
+        disp(sprintf('ML EM iteration %d',it));
+    end
+    
+    % forward projection
+    yb = P * x;
+    
+    % ratio sinogram
+    yr = yi(:)./yb;
+    yr(yb==0) = 0;          
+    yr(yi(:)==0&yb==0) = 1; % deal with zeros
+    
+    % backprojection
+    xb = P' * yr;
+    
+    % new image estimate
+    x = x./s .* xb;
+    
+    % save image estimate 
+    X(:,it) = x(:);
+        
+    % calculate the Poisson log likelihood 
+    L(it) = sum(yi(:).*log(yb) - yb);
+    
+    %Display Algorithim changes
+    if mod(it-1,4)==0
+        k=k+1;
+        kk=1;
+    end
+    figure(k);
+    subplot(2,2,kk);
+    imagesc(reshape(X(:,it),imgsiz),[0 90]); axis image; 
+    axis image; title(sprintf('iteration number: %d',it)); colorbar; 
+    kk=kk+1;
+end
+
+        
+% display the EM image estimate 
+figure(2)
+subplot(224), imagesc(reshape(X(:,40),imgsiz),[0 90]); axis image; 
+axis image; title('4. Reconstructed Image'); colorbar;
+%individual figure
+figure(4)
+imagesc(reshape(X(:,40),imgsiz),[0 90]); axis image; 
+axis image; title('4. Reconstructed Image'); colorbar;
+
+figure(1)
+imagesc(x0,[0 90]); 
+axis image; title('1. Noise-Free Image'); colorbar;
+%% Evaluation of likelihood and reconstruction error
+disp('4. Evaluation of Poisson log likelihood and reconstruction error')
+
+% Assess reconstruction error of EM iterates using RMSE
+for it = 1:maxit
+    rmse = sqrt(mean((X(:,it)-x0(:)).^2)); % absolute RMSE
+    RMSE(it) = rmse / sqrt(mean((x0(:)).^2)) * 100; % percent RMSE
+end
+
+% plot of the Poisson log likelihood as a function of iterations
+ii = 1:maxit;
+figure(5)
+subplot(121), plot(ii,L,'b-x'); 
+set(gca,'FontSize',16);
+xlabel('Iteration Number'); ylabel('Poisson Log Likelihood');
+
+% plot of RMSE as a function of iterations
+subplot(122), plot(ii,RMSE,'r-x');
+set(gca,'FontSize',16);
+xlabel('Iteration Number'); ylabel('RMSE (%)');
+
+
+
+##### SOURCE END #####
+--></body></html>
